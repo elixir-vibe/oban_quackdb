@@ -22,13 +22,25 @@ jobs:
         include:
           - elixir: "1.19"
             otp: "28.3"
-            command: mix test
+            oban: released
+            command: mix compile --warnings-as-errors && mix format --check-formatted && mix test
           - elixir: "1.20"
             otp: "29.0"
+            oban: released
             command: mix ci
+          - elixir: "1.20"
+            otp: "29.0"
+            oban: main
+            command: mix compile --warnings-as-errors && mix test
 
     steps:
       - uses: actions/checkout@v7
+
+      - if: matrix.oban == 'main'
+        uses: actions/checkout@v7
+        with:
+          repository: oban-bg/oban
+          path: tmp/oban
 
       - uses: erlef/setup-beam@v1
         with:
@@ -42,8 +54,62 @@ jobs:
             _build
             ~/.cache/quackdb
             ~/.duckdb/extensions
-          key: ${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.oban }}-${{ hashFiles('mix.lock') }}
 
       - run: mix deps.get
+        env:
+          OBAN_QUACKDB_OBAN_PATH: ${{ matrix.oban == 'main' && format('{0}/tmp/oban', github.workspace) || '' }}
       - run: mix deps.compile
+        env:
+          OBAN_QUACKDB_OBAN_PATH: ${{ matrix.oban == 'main' && format('{0}/tmp/oban', github.workspace) || '' }}
       - run: ${{ matrix.command }}
+        env:
+          OBAN_QUACKDB_OBAN_PATH: ${{ matrix.oban == 'main' && format('{0}/tmp/oban', github.workspace) || '' }}
+
+      - if: matrix.elixir == '1.20' && matrix.oban == 'released'
+        run: mix hex.audit
+
+      - if: matrix.elixir == '1.20' && matrix.oban == 'released'
+        run: mix hex.build --unpack --output /tmp/oban_quackdb-package
+
+  consumer:
+    name: Packaged consumer
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0"
+          elixir-version: "1.20"
+
+      - run: mix deps.get
+      - run: mix hex.build --unpack --output /tmp/oban_quackdb-package
+      - run: |
+          mkdir -p /tmp/oban_quackdb-consumer/lib
+          cat > /tmp/oban_quackdb-consumer/mix.exs <<'EOF'
+          defmodule ObanQuackDB.Consumer.MixProject do
+            use Mix.Project
+
+            def project do
+              [
+                app: :oban_quackdb_consumer,
+                version: "0.1.0",
+                elixir: "~> 1.19",
+                deps: [{:oban_quackdb, path: "/tmp/oban_quackdb-package"}]
+              ]
+            end
+
+            def application, do: [extra_applications: [:logger]]
+          end
+          EOF
+          cat > /tmp/oban_quackdb-consumer/lib/consumer.ex <<'EOF'
+          defmodule ObanQuackDB.Consumer do
+            def engine, do: Oban.Engines.QuackDB
+            def migration, do: Oban.Migrations.QuackDB
+          end
+          EOF
+          cd /tmp/oban_quackdb-consumer
+          mix deps.get
+          mix compile --warnings-as-errors

@@ -33,7 +33,14 @@ defmodule Oban.Engines.QuackDB do
   alias Oban.QuackDB.Transaction
 
   @impl Engine
-  defdelegate init(conf, opts), to: Basic
+  def init(%Config{} = conf, opts) do
+    if opts[:validate] do
+      Basic.init(conf, opts)
+    else
+      validate_config!(conf)
+      Basic.init(conf, opts)
+    end
+  end
 
   @impl Engine
   defdelegate put_meta(conf, meta, key, value), to: Basic
@@ -467,6 +474,41 @@ defmodule Oban.Engines.QuackDB do
   end
 
   # Helpers
+
+  defp validate_config!(%Config{prefix: prefix}) when prefix != false do
+    raise ArgumentError,
+          "Oban.Engines.QuackDB doesn't support prefixes; configure Oban with prefix: false"
+  end
+
+  defp validate_config!(%Config{notifier: {notifier, _opts}} = conf)
+       when notifier not in [Oban.Notifiers.PG, Oban.Notifiers.Isolated] do
+    raise ArgumentError,
+          "Oban.Engines.QuackDB requires Oban.Notifiers.PG or Oban.Notifiers.Isolated, " <>
+            "got: #{inspect(conf.notifier)}"
+  end
+
+  defp validate_config!(%Config{peer: {Oban.Peers.Isolated, _opts}} = conf) do
+    reject_reindexer!(conf)
+  end
+
+  defp validate_config!(%Config{peer: false} = conf) do
+    reject_reindexer!(conf)
+  end
+
+  defp validate_config!(%Config{} = conf) do
+    raise ArgumentError,
+          "Oban.Engines.QuackDB only supports single-node operation with " <>
+            "Oban.Peers.Isolated or peer: false, got: #{inspect(conf.peer)}"
+  end
+
+  defp reject_reindexer!(%Config{plugins: plugins}) do
+    if Enum.any?(plugins, fn {plugin, _opts} -> plugin == Oban.Plugins.Reindexer end) do
+      raise ArgumentError,
+            "Oban.Engines.QuackDB doesn't support the PostgreSQL-specific Reindexer plugin"
+    end
+
+    :ok
+  end
 
   defp update_ids(_conf, [], _opts), do: :ok
 

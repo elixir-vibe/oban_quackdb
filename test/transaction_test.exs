@@ -36,6 +36,22 @@ defmodule Oban.QuackDB.TransactionTest do
     assert Process.get({ConflictRepo, :attempt}) == 3
   end
 
+  test "does not retry when retries are disabled" do
+    conf =
+      Oban.Config.new(
+        engine: Oban.Engines.QuackDB,
+        notifier: Oban.Notifiers.Isolated,
+        peer: false,
+        repo: ConflictRepo
+      )
+
+    assert_raise QuackDB.Error, "conflict", fn ->
+      Transaction.run(conf, fn -> :ok end, expected_delay: 0, retry: false)
+    end
+
+    assert Process.get({ConflictRepo, :attempt}) == 1
+  end
+
   test "does not retry ordinary QuackDB errors" do
     conf =
       Oban.Config.new(

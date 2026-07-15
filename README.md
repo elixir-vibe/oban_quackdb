@@ -25,7 +25,7 @@ def deps do
 end
 ```
 
-The package requires Elixir 1.19+, Oban 2.23+, QuackDB 0.5.17+, and DuckDB 1.5.3+.
+The package requires Elixir 1.19+, Oban 2.23.x, QuackDB 0.5.17+, and DuckDB 1.5.3+.
 
 ## Repo
 
@@ -49,8 +49,24 @@ config :my_app, MyApp.ObanRepo,
   token: System.fetch_env!("QUACKDB_TOKEN")
 ```
 
-The application owns the DuckDB server lifecycle. Use persistent storage for Oban jobs; don't use
-QuackDB's rebuildable `:no_wal_writes` recovery mode.
+The application owns the DuckDB server lifecycle. For example, start a dedicated managed server
+before the repo in your supervision tree:
+
+```elixir
+children = [
+  {QuackDB.Server,
+   name: MyApp.ObanDuckDB,
+   database: System.fetch_env!("OBAN_DUCKDB_DATABASE"),
+   endpoint: "quack:localhost:9495",
+   token: System.fetch_env!("QUACKDB_TOKEN")},
+  MyApp.ObanRepo,
+  {Oban, Application.fetch_env!(:my_app, Oban)}
+]
+```
+
+Use persistent storage for Oban jobs; don't use QuackDB's rebuildable `:no_wal_writes` recovery
+mode. See QuackDB's [managed-server guide](https://hexdocs.pm/quackdb/managed-duckdb.html) for
+lifecycle and deployment details.
 
 ## Migration
 
@@ -79,8 +95,9 @@ config :my_app, Oban,
   repo: MyApp.ObanRepo
 ```
 
-Cron, Pruner, and Lifeline are supported for single-node use. Don't enable the PostgreSQL-specific
-Reindexer plugin.
+Cron, Pruner, and Lifeline are supported for single-node use. The engine validates producer
+configuration and raises for prefixes, database-backed peers, unsupported notifiers, or the
+PostgreSQL-specific Reindexer plugin.
 
 ## Current limitations
 

@@ -15,7 +15,9 @@ defmodule Oban.QuackDB.Transaction do
     Oban.Repo.transaction(conf, fun_or_multi, opts)
   rescue
     error in QuackDB.Error ->
-      if error.retriable? and attempt < expected_retry do
+      retry? = Keyword.get(opts, :retry, true) not in [0, false]
+
+      if error.retriable? and retry? and attempt < expected_retry do
         expected_delay
         |> Oban.Backoff.jitter()
         |> Process.sleep()

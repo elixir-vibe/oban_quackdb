@@ -7,6 +7,22 @@ defmodule Oban.QuackDB.EngineTest do
   alias Oban.Engines.QuackDB, as: QuackEngine
   alias Oban.QuackDB.{TestRepo, TestWorker}
 
+  defmodule UnsupportedNotifier do
+    @behaviour Oban.Notifier
+
+    @impl Oban.Notifier
+    def start_link(_opts), do: :ignore
+
+    @impl Oban.Notifier
+    def listen(_server, _channels), do: :ok
+
+    @impl Oban.Notifier
+    def unlisten(_server, _channels), do: :ok
+
+    @impl Oban.Notifier
+    def notify(_server, _channel, _payload), do: :ok
+  end
+
   setup do
     TestRepo.delete_all(Job)
 
@@ -22,6 +38,67 @@ defmodule Oban.QuackDB.EngineTest do
       )
 
     {:ok, conf: conf}
+  end
+
+  test "rejects unsupported prefixes" do
+    conf =
+      Config.new(
+        engine: QuackEngine,
+        notifier: Oban.Notifiers.Isolated,
+        peer: false,
+        prefix: "private",
+        repo: TestRepo
+      )
+
+    assert_raise ArgumentError, ~r/doesn't support prefixes/, fn ->
+      QuackEngine.init(conf, queue: "default", limit: 1)
+    end
+  end
+
+  test "rejects unsupported notifiers" do
+    conf =
+      Config.new(
+        engine: QuackEngine,
+        notifier: UnsupportedNotifier,
+        peer: false,
+        prefix: false,
+        repo: TestRepo
+      )
+
+    assert_raise ArgumentError, ~r/requires Oban.Notifiers.PG/, fn ->
+      QuackEngine.init(conf, queue: "default", limit: 1)
+    end
+  end
+
+  test "rejects database-backed peers" do
+    conf =
+      Config.new(
+        engine: QuackEngine,
+        notifier: Oban.Notifiers.Isolated,
+        peer: Oban.Peers.Database,
+        prefix: false,
+        repo: TestRepo
+      )
+
+    assert_raise ArgumentError, ~r/only supports single-node operation/, fn ->
+      QuackEngine.init(conf, queue: "default", limit: 1)
+    end
+  end
+
+  test "rejects the Reindexer plugin" do
+    conf =
+      Config.new(
+        engine: QuackEngine,
+        notifier: Oban.Notifiers.Isolated,
+        peer: false,
+        plugins: [Oban.Plugins.Reindexer],
+        prefix: false,
+        repo: TestRepo
+      )
+
+    assert_raise ArgumentError, ~r/doesn't support.*Reindexer/, fn ->
+      QuackEngine.init(conf, queue: "default", limit: 1)
+    end
   end
 
   test "executes jobs through an Oban supervision tree" do

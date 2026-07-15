@@ -35,12 +35,12 @@ defmodule ObanQuackDB.MixProject do
 
   defp deps do
     [
-      {:oban, "~> 2.23"},
+      oban_dep(),
       {:quackdb, "~> 0.5.17"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.38", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.38", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.6", only: [:dev, :test], runtime: false},
       {:reach, "~> 2.6", only: [:dev, :test], runtime: false},
@@ -48,13 +48,20 @@ defmodule ObanQuackDB.MixProject do
     ]
   end
 
+  defp oban_dep do
+    case System.get_env("OBAN_QUACKDB_OBAN_PATH") do
+      path when path in [nil, ""] -> {:oban, "~> 2.23.0"}
+      path -> {:oban, path: Path.expand(path), override: true}
+    end
+  end
+
   defp aliases do
     [
       ci: [
-        "format",
         "compile --warnings-as-errors",
         "format --check-formatted",
         "test",
+        "docs --warnings-as-errors",
         "credo --strict",
         "dialyzer",
         "ex_dna --max-clones 0",
