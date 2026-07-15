@@ -15,8 +15,11 @@ defmodule Oban.Engines.QuackDB do
 
       Oban.start_link(
         engine: Oban.Engines.QuackDB,
+        notifier: Oban.Notifiers.PG,
+        peer: Oban.Peers.Isolated,
+        prefix: false,
         queues: [default: 10],
-        repo: MyApp.Repo
+        repo: MyApp.ObanRepo
       )
   """
 

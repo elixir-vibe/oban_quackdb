@@ -15,8 +15,9 @@ defmodule ObanQuackDB.MixProject do
       aliases: aliases(),
       dialyzer: [plt_add_apps: [:ex_unit]],
       name: "Oban QuackDB",
-      description: "An experimental QuackDB engine for Oban",
+      description: "Durable single-node Oban jobs in DuckDB through QuackDB",
       source_url: @source_url,
+      homepage_url: @source_url,
       package: package(),
       docs: docs()
     ]
